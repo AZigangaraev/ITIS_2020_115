@@ -10,13 +10,14 @@ import CoreData
 
 class ViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     private let cellIdentifier = "Cell"
-    private var notes: [NSManagedObject] = []
+    private var notes: [Note] = []
     private let dateFormatter: DateFormatter = {
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .medium
         dateFormatter.timeStyle = .medium
         return dateFormatter
     }()
+
     @IBOutlet private var tableView: UITableView!
 
     override func viewDidLoad() {
@@ -25,9 +26,8 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
     }
 
     private func reload() {
-        let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "Note")
         do {
-            notes = try context.fetch(fetchRequest)
+            notes = try context.fetch(Note.fetchRequest())
             tableView.reloadData()
         } catch {
             print(error)
@@ -49,16 +49,42 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: cellIdentifier, for: indexPath)
         let note = notes[indexPath.row]
-        cell.textLabel?.text = note.value(forKeyPath: "title") as? String
-        cell.detailTextLabel?.text = (note.value(forKey: "dateModified") as? Date).map { dateFormatter.string(from: $0) }
+        cell.textLabel?.text = note.title
+        cell.detailTextLabel?.text = note.dateModified.map(dateFormatter.string)
         return cell
     }
 
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        showNoteDetails(note: notes[indexPath.row])
+    }
+
+    func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        let deleteAction = UIContextualAction(style: .destructive, title: "Delete") { [unowned self] _, _, completion in
+            let note = notes[indexPath.row]
+            context.delete(note)
+            do {
+                try context.save()
+                notes.remove(at: indexPath.row)
+                tableView.deleteRows(at: [ indexPath ], with: .automatic)
+                completion(true)
+            } catch {
+                completion(false)
+            }
+        }
+        return UISwipeActionsConfiguration(actions: [ deleteAction ])
+    }
+
     @IBAction private func addTap() {
+        showNoteDetails()
+    }
+
+    private func showNoteDetails(note: Note? = nil) {
         let controller = editNoteViewController { [self] in
             reload()
             navigationController?.popViewController(animated: true)
         }
+        controller.note = note
         navigationController?.pushViewController(controller, animated: true)
     }
 
